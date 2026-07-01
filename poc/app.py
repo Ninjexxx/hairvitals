@@ -191,106 +191,6 @@ def segment_hair_fallback(image_path):
     return result
 
 
-# ============================================================
-# 2. Espessura do fio
-# ============================================================
-def analyze_hair_thickness(image_path, mask_path):
-    """Mede espessura dos fios usando erosão para separar fios grudados."""
-    img = cv2.imread(image_path)
-    mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
-
-    if mask is None or np.all(mask == 0):
-        return {'mean_thickness': 0, 'median_thickness': 0, 'thickness_class': 'N/A',
-                'status': 'Sem cabelo detectado'}
-
-    # Garante mesmo tamanho
-    if img is not None and mask.shape[:2] != img.shape[:2]:
-        mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST)
-
-    _, binary = cv2.threshold(mask, 127, 255, 0)
-
-    # EROSÃO para separar fios grudados — chave para medir fios individuais
-    erode_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
-    separated = cv2.erode(binary, erode_kernel, iterations=1)
-    # Dilata de volta para recuperar espessura real (mas agora separados)
-    separated = cv2.dilate(separated, erode_kernel, iterations=1)
-
-    # Filtra apenas componentes alongados (fios reais)
-    nlabels, labels, stats, _ = cv2.connectedComponentsWithStats(separated)
-    hair_only = np.zeros_like(separated)
-    for i in range(1, nlabels):
-        area = stats[i, cv2.CC_STAT_AREA]
-        cw = stats[i, cv2.CC_STAT_WIDTH]
-        ch = stats[i, cv2.CC_STAT_HEIGHT]
-        if area < 30:
-            continue
-        aspect = max(cw, ch) / (min(cw, ch) + 1)
-        solidity = area / (cw * ch + 1)
-        # Fio: alongado E fino
-        if aspect > 3.0 and solidity < 0.5:
-            hair_only[labels == i] = 255
-
-    if cv2.countNonZero(hair_only) == 0:
-        # Fallback: usa máscara original mas com filtro de aspect
-        hair_only = separated
-
-    if cv2.countNonZero(hair_only) == 0:
-        return {'mean_thickness': 0, 'median_thickness': 0, 'thickness_class': 'N/A',
-                'status': 'Não foi possível isolar fios individuais'}
-
-    # Distance transform para medir espessura
-    dist = cv2.distanceTransform(hair_only, cv2.DIST_L2, 5)
-
-    # Esqueletização para amostrar no centro dos fios
-    skel = np.zeros_like(hair_only)
-    element = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
-    temp = hair_only.copy()
-    while True:
-        opened = cv2.morphologyEx(temp, cv2.MORPH_OPEN, element)
-        sub = cv2.subtract(temp, opened)
-        eroded = cv2.erode(temp, element)
-        skel = cv2.bitwise_or(skel, sub)
-        temp = eroded.copy()
-        if cv2.countNonZero(temp) == 0:
-            break
-
-    skel_points = np.where(skel > 0)
-    if len(skel_points[0]) == 0:
-        return {'mean_thickness': 0, 'median_thickness': 0, 'thickness_class': 'N/A',
-                'status': 'Esqueleto vazio'}
-
-    thicknesses = dist[skel_points] * 2  # diâmetro
-
-    # Remove outliers (IQR)
-    q1, q3 = np.percentile(thicknesses, [25, 75])
-    iqr = q3 - q1
-    filtered = thicknesses[(thicknesses >= q1 - 1.5 * iqr) & (thicknesses <= q3 + 1.5 * iqr)]
-    if len(filtered) == 0:
-        filtered = thicknesses
-
-    mean_t = float(np.mean(filtered))
-    median_t = float(np.median(filtered))
-
-    # Classificação (em pixels — depende da resolução da imagem)
-    if median_t < 2.0:
-        t_class = "Muito fino (possível miniaturização)"
-    elif median_t < 3.5:
-        t_class = "Fino"
-    elif median_t < 5.5:
-        t_class = "Normal"
-    elif median_t < 8.0:
-        t_class = "Grosso"
-    else:
-        t_class = "Muito grosso"
-
-    return {
-        'mean_thickness': round(mean_t, 2),
-        'median_thickness': round(median_t, 2),
-        'thickness_class': t_class,
-        'num_measurements': len(filtered),
-        'status': 'OK'
-    }
-
 
 # ============================================================
 # 3. Análise de vermelhidão (Índice de Eritema)
@@ -378,28 +278,29 @@ def analyze_oiliness(img, scalp_mask):
 # ============================================================
 # 5. Risco de alopecia
 # ============================================================
-def predict_alopecia_risk(thickness_data, scalp_coverage):
-    """Prediz risco de alopecia baseado em espessura e cobertura."""
+def predict_alopecia_risk(scalp_coverage, hair_coverage):
+    """Prediz risco de alopecia baseado na cobertura capilar."""
     risk_score = 0
     factors = []
 
-    # Espessura
-    if thickness_data.get('status') == 'OK':
-        median = thickness_data.get('median_thickness', 0)
-        if median < 2.0:
-            risk_score += 35
-            factors.append("Fios muito finos (miniaturização folicular)")
-        elif median < 3.5:
-            risk_score += 15
-            factors.append("Fios abaixo da espessura ideal")
-
-    # Cobertura do couro exposto
-    if scalp_coverage > 80:
-        risk_score += 30
+    # Cobertura do couro exposto (principal indicador sem calibração)
+    if scalp_coverage > 85:
+        risk_score += 40
         factors.append("Alta exposição do couro cabeludo")
-    elif scalp_coverage > 60:
-        risk_score += 15
+    elif scalp_coverage > 70:
+        risk_score += 25
         factors.append("Couro cabeludo moderadamente exposto")
+    elif scalp_coverage > 55:
+        risk_score += 10
+        factors.append("Leve exposição do couro cabeludo")
+
+    # Baixa cobertura de cabelo
+    if hair_coverage < 0.10:
+        risk_score += 35
+        factors.append("Muito pouco cabelo detectado na imagem")
+    elif hair_coverage < 0.25:
+        risk_score += 15
+        factors.append("Baixa densidade capilar detectada")
 
     risk_score = min(100, risk_score)
 
@@ -527,14 +428,7 @@ def run_full_analysis(image_path):
 
     scalp_coverage = round((1 - hair_coverage) * 100, 1)
 
-    # 2. Espessura
-    try:
-        thickness = analyze_hair_thickness(image_path, mask_path)
-        results['modules']['thickness'] = thickness
-    except Exception as e:
-        results['modules']['thickness'] = {'status': f'Erro: {e}'}
-
-    # 3. Vermelhidão
+    # 2. Vermelhidão
     try:
         redness_score, redness_class = analyze_redness(img, scalp_mask)
         results['modules']['redness'] = {
@@ -546,7 +440,7 @@ def run_full_analysis(image_path):
         redness_score = 0
         results['modules']['redness'] = {'status': f'Erro: {e}'}
 
-    # 4. Oleosidade
+    # 3. Oleosidade
     try:
         oiliness_score, oiliness_class = analyze_oiliness(img, scalp_mask)
         results['modules']['oiliness'] = {
@@ -558,17 +452,14 @@ def run_full_analysis(image_path):
         oiliness_score = 0
         results['modules']['oiliness'] = {'status': f'Erro: {e}'}
 
-    # 5. Risco de alopecia
+    # 4. Risco de alopecia
     try:
-        alopecia = predict_alopecia_risk(
-            results['modules'].get('thickness', {}),
-            scalp_coverage
-        )
+        alopecia = predict_alopecia_risk(scalp_coverage, hair_coverage)
         results['modules']['alopecia_risk'] = alopecia
     except Exception as e:
         results['modules']['alopecia_risk'] = {'status': f'Erro: {e}'}
 
-    # 6. Risco de seborreia
+    # 5. Risco de seborreia
     try:
         seborrhea = predict_seborrhea_risk(oiliness_score, redness_score, img, scalp_mask)
         results['modules']['seborrhea_risk'] = seborrhea
@@ -583,10 +474,6 @@ def run_full_analysis(image_path):
 
 def generate_summary(modules):
     items = []
-
-    t = modules.get('thickness', {})
-    if t.get('status') == 'OK':
-        items.append(f"Espessura: {t['thickness_class']} ({t['median_thickness']}px)")
 
     r = modules.get('redness', {})
     if r.get('status') == 'OK':

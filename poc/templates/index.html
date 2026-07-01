@@ -156,15 +156,8 @@
             <div class="card">
                 <h2>📊 Resultados</h2>
 
-                <!-- Espessura -->
-                <div class="result-item">
-                    <h3>💇 Espessura dos Fios</h3>
-                    <div class="value" id="val-thickness">-</div>
-                    <div class="label" id="lbl-thickness">-</div>
-                </div>
-
                 <!-- Vermelhidão e Oleosidade -->
-                <div class="result-grid" style="margin-top:12px;">
+                <div class="result-grid">
                     <div class="result-item">
                         <h3>🔴 Vermelhidão</h3>
                         <div class="value" id="val-redness">-</div>
@@ -306,13 +299,6 @@
             document.getElementById('loading').style.display = 'none';
             document.getElementById('results-section').style.display = 'block';
             const m = data.modules || {};
-
-            // Espessura
-            const t = m.thickness || {};
-            if(t.status === 'OK') {
-                document.getElementById('val-thickness').textContent = t.median_thickness + ' px';
-                document.getElementById('lbl-thickness').textContent = t.thickness_class;
-            }
 
             // Vermelhidão
             const r = m.redness || {};
