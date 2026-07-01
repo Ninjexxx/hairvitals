@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pth
+*.pt
+.env
+
+# Dados e resultados
+data/
+results/
+results2/
+poc/uploads/
+poc/results/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Checkpoints
+DiffuseIT-M/checkpoints/*.pt
+DiffuseIT-M/checkpoints/*.pth

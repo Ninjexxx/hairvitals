@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ScalpVision - Diagnóstico Capilar</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            padding: 16px;
+        }
+        .container { max-width: 600px; margin: 0 auto; }
+        header { text-align: center; padding: 20px 0; }
+        header h1 { font-size: 1.8rem; color: #4fc3f7; margin-bottom: 8px; }
+        header p { color: #90a4ae; font-size: 0.9rem; }
+
+        .card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 16px;
+            backdrop-filter: blur(10px);
+        }
+        .card h2 { font-size: 1.1rem; color: #4fc3f7; margin-bottom: 16px; }
+
+        .btn {
+            padding: 14px 28px; border: none; border-radius: 12px;
+            font-size: 1rem; font-weight: 600; cursor: pointer;
+            transition: all 0.3s; display: inline-flex; align-items: center; gap: 8px;
+        }
+        .btn-primary { background: linear-gradient(135deg, #4fc3f7, #0288d1); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(79,195,247,0.4); }
+        .btn-secondary { background: rgba(255,255,255,0.1); color: #e0e0e0; border: 1px solid rgba(255,255,255,0.2); }
+        .btn-capture { background: linear-gradient(135deg, #66bb6a, #43a047); color: white; }
+        .btn-danger { background: linear-gradient(135deg, #ef5350, #c62828); color: white; }
+        .btn-group { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+        #video-container { position: relative; width: 100%; max-width: 400px; margin: 0 auto 16px; border-radius: 12px; overflow: hidden; background: #000; display: none; }
+        #video { width: 100%; display: block; }
+        #canvas { display: none; }
+
+        .upload-area {
+            border: 2px dashed rgba(79,195,247,0.4); border-radius: 12px;
+            padding: 32px; text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 16px;
+        }
+        .upload-area:hover { border-color: #4fc3f7; background: rgba(79,195,247,0.05); }
+        .upload-area input[type="file"] { display: none; }
+
+        #preview-container { display: none; text-align: center; margin: 16px 0; }
+        #preview-image { max-width: 100%; max-height: 300px; border-radius: 12px; border: 2px solid rgba(79,195,247,0.3); }
+
+        .loading { display: none; text-align: center; padding: 40px; }
+        .spinner { width: 50px; height: 50px; border: 4px solid rgba(79,195,247,0.2); border-top-color: #4fc3f7; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #results-section { display: none; }
+
+        .result-item {
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px; padding: 16px; margin-bottom: 12px;
+        }
+        .result-item h3 { font-size: 0.9rem; color: #4fc3f7; margin-bottom: 8px; }
+        .result-item .value { font-size: 1.3rem; font-weight: 700; color: #fff; }
+        .result-item .label { font-size: 0.85rem; color: #90a4ae; margin-top: 4px; }
+
+        .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        .score-bar { height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+        .score-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+        .score-low { background: #66bb6a; }
+        .score-medium { background: #ffa726; }
+        .score-high { background: #ef5350; }
+
+        .risk-box { border-left: 3px solid #ffa726; }
+        .risk-factors { list-style: none; padding: 0; margin-top: 8px; }
+        .risk-factors li { font-size: 0.82rem; color: #ffab91; padding: 3px 0; }
+        .risk-factors li::before { content: "⚠ "; color: #ffa726; }
+
+        .summary-box {
+            background: rgba(79,195,247,0.1); border: 1px solid rgba(79,195,247,0.3);
+            border-radius: 12px; padding: 16px; margin-top: 16px;
+        }
+        .summary-box h3 { color: #4fc3f7; margin-bottom: 8px; }
+
+        .mask-preview { text-align: center; margin-top: 16px; }
+        .mask-preview img { max-width: 100%; max-height: 200px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+
+        .tips { font-size: 0.85rem; color: #90a4ae; padding: 12px; background: rgba(255,193,7,0.1); border: 1px solid rgba(255,193,7,0.2); border-radius: 8px; margin-top: 12px; }
+        .tips strong { color: #ffc107; }
+
+        @media (max-width: 400px) {
+            .result-grid { grid-template-columns: 1fr; }
+            .btn-group { flex-direction: column; }
+            .btn { width: 100%; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔬 ScalpVision</h1>
+            <p>Diagnóstico capilar por imagem</p>
+        </header>
+
+        <!-- Captura -->
+        <div class="card" id="capture-card">
+            <h2>📸 Capturar Imagem</h2>
+            <div id="video-container"><video id="video" autoplay playsinline></video></div>
+            <div class="btn-group" id="camera-buttons">
+                <button class="btn btn-primary" id="btn-start-camera" onclick="startCamera()">📷 Abrir Câmera</button>
+                <button class="btn btn-capture" id="btn-capture" onclick="capturePhoto()" style="display:none;">📸 Tirar Foto</button>
+                <button class="btn btn-danger" id="btn-stop-camera" onclick="stopCamera()" style="display:none;">✕ Fechar</button>
+            </div>
+            <div style="margin: 20px 0; color: #90a4ae;">— ou —</div>
+            <div class="upload-area" onclick="document.getElementById('file-input').click()">
+                <div style="font-size:3rem; margin-bottom:12px;">📁</div>
+                <p>Toque para selecionar uma imagem</p>
+                <p style="font-size:0.8rem; color:#666; margin-top:8px;">JPG, PNG ou WEBP (máx. 16MB)</p>
+                <input type="file" id="file-input" accept="image/*" onchange="handleFileUpload(event)">
+            </div>
+            <div class="tips">
+                <strong>💡 Dicas:</strong><br>
+                • Ilumine bem o couro cabeludo<br>
+                • Câmera a ~10cm de distância<br>
+                • Afaste os fios para expor o couro
+            </div>
+        </div>
+
+        <!-- Preview -->
+        <div id="preview-container">
+            <div class="card">
+                <h2>📋 Pré-visualização</h2>
+                <img id="preview-image" alt="Preview">
+                <div class="btn-group" style="margin-top:16px;">
+                    <button class="btn btn-primary" onclick="analyzeImage()">🔍 Analisar</button>
+                    <button class="btn btn-secondary" onclick="resetCapture()">↩ Recapturar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div class="loading" id="loading">
+            <div class="card">
+                <div class="spinner"></div>
+                <p>Analisando couro cabeludo...</p>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div id="results-section">
+            <div class="card">
+                <h2>📊 Resultados</h2>
+
+                <!-- Espessura -->
+                <div class="result-item">
+                    <h3>💇 Espessura dos Fios</h3>
+                    <div class="value" id="val-thickness">-</div>
+                    <div class="label" id="lbl-thickness">-</div>
+                </div>
+
+                <!-- Vermelhidão e Oleosidade -->
+                <div class="result-grid" style="margin-top:12px;">
+                    <div class="result-item">
+                        <h3>🔴 Vermelhidão</h3>
+                        <div class="value" id="val-redness">-</div>
+                        <div class="score-bar"><div class="score-bar-fill" id="bar-redness"></div></div>
+                        <div class="label" id="lbl-redness">-</div>
+                    </div>
+                    <div class="result-item">
+                        <h3>💧 Oleosidade</h3>
+                        <div class="value" id="val-oiliness">-</div>
+                        <div class="score-bar"><div class="score-bar-fill" id="bar-oiliness"></div></div>
+                        <div class="label" id="lbl-oiliness">-</div>
+                    </div>
+                </div>
+
+                <!-- Risco de Alopecia -->
+                <div class="result-item risk-box" style="margin-top:12px;">
+                    <h3>⚠️ Risco de Alopecia</h3>
+                    <div class="value" id="val-alopecia">-</div>
+                    <div class="score-bar"><div class="score-bar-fill" id="bar-alopecia"></div></div>
+                    <div class="label" id="lbl-alopecia-rec">-</div>
+                    <ul class="risk-factors" id="alopecia-factors"></ul>
+                </div>
+
+                <!-- Risco de Seborreia -->
+                <div class="result-item risk-box" style="margin-top:12px;">
+                    <h3>🧴 Risco de Seborreia</h3>
+                    <div class="value" id="val-seborrhea">-</div>
+                    <div class="score-bar"><div class="score-bar-fill" id="bar-seborrhea"></div></div>
+                    <div class="label" id="lbl-seborrhea-rec">-</div>
+                    <ul class="risk-factors" id="seborrhea-factors"></ul>
+                </div>
+
+                <!-- Resumo -->
+                <div class="summary-box">
+                    <h3>📝 Resumo</h3>
+                    <p id="summary-text">-</p>
+                </div>
+
+                <!-- Máscara -->
+                <div class="mask-preview" id="mask-preview-container" style="display:none;">
+                    <h3 style="color:#4fc3f7; margin:12px 0 8px;">🖼️ Segmentação</h3>
+                    <img id="mask-image" alt="Máscara">
+                </div>
+
+                <div class="btn-group" style="margin-top:20px;">
+                    <button class="btn btn-primary" onclick="resetCapture()">📷 Nova Análise</button>
+                </div>
+            </div>
+        </div>
+
+        <footer style="text-align:center; padding:20px; color:#546e7a; font-size:0.8rem;">
+            ScalpVision PoC • MICCAI 2025<br>
+            ⚠️ Protótipo de pesquisa. Não substitui avaliação médica.
+        </footer>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        let stream = null, capturedImageData = null, capturedFile = null;
+
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: {ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }
+                });
+                document.getElementById('video').srcObject = stream;
+                document.getElementById('video-container').style.display = 'block';
+                document.getElementById('btn-start-camera').style.display = 'none';
+                document.getElementById('btn-capture').style.display = 'inline-flex';
+                document.getElementById('btn-stop-camera').style.display = 'inline-flex';
+            } catch(e) { alert('Erro câmera: ' + e.message); }
+        }
+
+        function stopCamera() {
+            if(stream) { stream.getTracks().forEach(t=>t.stop()); stream=null; }
+            document.getElementById('video-container').style.display = 'none';
+            document.getElementById('btn-start-camera').style.display = 'inline-flex';
+            document.getElementById('btn-capture').style.display = 'none';
+            document.getElementById('btn-stop-camera').style.display = 'none';
+        }
+
+        function capturePhoto() {
+            const v = document.getElementById('video'), c = document.getElementById('canvas');
+            c.width = v.videoWidth; c.height = v.videoHeight;
+            c.getContext('2d').drawImage(v, 0, 0);
+            capturedImageData = c.toDataURL('image/jpeg', 0.9);
+            capturedFile = null;
+            showPreview(capturedImageData);
+            stopCamera();
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if(!file) return;
+            capturedFile = file; capturedImageData = null;
+            const reader = new FileReader();
+            reader.onload = ev => showPreview(ev.target.result);
+            reader.readAsDataURL(file);
+        }
+
+        function showPreview(url) {
+            document.getElementById('preview-image').src = url;
+            document.getElementById('preview-container').style.display = 'block';
+            document.getElementById('capture-card').style.display = 'none';
+        }
+
+        function resetCapture() {
+            capturedImageData = null; capturedFile = null;
+            document.getElementById('preview-container').style.display = 'none';
+            document.getElementById('capture-card').style.display = 'block';
+            document.getElementById('results-section').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('file-input').value = '';
+        }
+
+        async function analyzeImage() {
+            document.getElementById('preview-container').style.display = 'none';
+            document.getElementById('loading').style.display = 'block';
+            try {
+                let response;
+                if(capturedFile) {
+                    const fd = new FormData(); fd.append('image', capturedFile);
+                    response = await fetch('/upload', {method:'POST', body:fd});
+                } else if(capturedImageData) {
+                    response = await fetch('/capture', {
+                        method:'POST', headers:{'Content-Type':'application/json'},
+                        body: JSON.stringify({image: capturedImageData})
+                    });
+                } else { alert('Nenhuma imagem.'); resetCapture(); return; }
+
+                const data = await response.json();
+                if(data.error) { alert('Erro: '+data.error); resetCapture(); return; }
+                displayResults(data);
+            } catch(e) { alert('Erro: '+e.message); resetCapture(); }
+        }
+
+        function displayResults(data) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('results-section').style.display = 'block';
+            const m = data.modules || {};
+
+            // Espessura
+            const t = m.thickness || {};
+            if(t.status === 'OK') {
+                document.getElementById('val-thickness').textContent = t.median_thickness + ' px';
+                document.getElementById('lbl-thickness').textContent = t.thickness_class;
+            }
+
+            // Vermelhidão
+            const r = m.redness || {};
+            if(r.status === 'OK') {
+                document.getElementById('val-redness').textContent = r.score + '%';
+                document.getElementById('lbl-redness').textContent = r.class;
+                const bar = document.getElementById('bar-redness');
+                bar.style.width = r.score + '%';
+                bar.className = 'score-bar-fill ' + getScoreClass(r.score);
+            }
+
+            // Oleosidade
+            const o = m.oiliness || {};
+            if(o.status === 'OK') {
+                document.getElementById('val-oiliness').textContent = o.score + '%';
+                document.getElementById('lbl-oiliness').textContent = o.class;
+                const bar = document.getElementById('bar-oiliness');
+                bar.style.width = o.score + '%';
+                bar.className = 'score-bar-fill ' + getScoreClass(o.score);
+            }
+
+            // Alopecia
+            const a = m.alopecia_risk || {};
+            if(a.status === 'OK') {
+                document.getElementById('val-alopecia').textContent = a.risk_score + '% - ' + a.risk_class;
+                const bar = document.getElementById('bar-alopecia');
+                bar.style.width = a.risk_score + '%';
+                bar.className = 'score-bar-fill ' + getScoreClass(a.risk_score);
+                document.getElementById('lbl-alopecia-rec').textContent = a.recommendation;
+                const list = document.getElementById('alopecia-factors');
+                list.innerHTML = '';
+                (a.risk_factors||[]).forEach(f => { const li=document.createElement('li'); li.textContent=f; list.appendChild(li); });
+            }
+
+            // Seborreia
+            const s = m.seborrhea_risk || {};
+            if(s.status === 'OK') {
+                document.getElementById('val-seborrhea').textContent = s.risk_score + '% - ' + s.risk_class;
+                const bar = document.getElementById('bar-seborrhea');
+                bar.style.width = s.risk_score + '%';
+                bar.className = 'score-bar-fill ' + getScoreClass(s.risk_score);
+                document.getElementById('lbl-seborrhea-rec').textContent = s.recommendation;
+                const list = document.getElementById('seborrhea-factors');
+                list.innerHTML = '';
+                (s.risk_factors||[]).forEach(f => { const li=document.createElement('li'); li.textContent=f; list.appendChild(li); });
+            }
+
+            // Resumo
+            document.getElementById('summary-text').textContent = data.summary || '-';
+
+            // Máscara
+            if(data.mask_file) {
+                document.getElementById('mask-preview-container').style.display = 'block';
+                document.getElementById('mask-image').src = '/results/' + data.mask_file;
+            }
+        }
+
+        function getScoreClass(score) {
+            if(score < 30) return 'score-low';
+            if(score < 60) return 'score-medium';
+            return 'score-high';
+        }
+    </script>
+</body>
+</html>
